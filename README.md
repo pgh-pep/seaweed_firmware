@@ -1,1 +1,1 @@
-# asne_firmware
+# seaweed_firmware
