@@ -2,8 +2,8 @@
 
 #define SBUS_PIN 4
 #define SBUS_BAUD 100000
-#define SBUS_START_BYTE = 0x0F
-#define SBUS_END_BYTE = 0x00
+#define SBUS_START_BYTE 0x0F
+#define SBUS_END_BYTE 0x00
 
 HardwareSerial sbus_serial(1); // UART1
 
@@ -59,7 +59,7 @@ const char *CHANNEL_LABELS[16] = {
 #define JOY_R_LR_CENTER 967
 #define JOY_R_UD_CENTER 988
 #define JOY_L_UD_CENTER 987
-#define JOY_L_LR_CENTER 1146
+#define JOY_L_LR_CENTER 1000
 #define JOY_AXIS_SCALE 800
 #define VR_MIN 200
 #define VR_MAX 1800
@@ -112,7 +112,7 @@ void normalize_channels()
                                                                                     : 0;
 
   // KNOBS
-  normalized_channels[5] = float(raw_channels[5] - VR_MIN) / (VR_MAX - VR_MIN);
+  normalized_channels[5] = 1 - float(raw_channels[5] - VR_MIN) / (VR_MAX - VR_MIN);
   normalized_channels[7] = float(raw_channels[7] - VR_MIN) / (VR_MAX - VR_MIN);
 
   // rest are meh
@@ -166,15 +166,14 @@ void loop()
       parseSBUS(sbus_data);
       normalize_channels();
 
-      // Serial.print("S ");
       for (int i = 0; i < 16; i++)
       {
         Serial.print(normalized_channels[i], 4);
-        Serial.print(', ');
+        Serial.print(", ");
       }
 
       Serial.print(failsafe);
-      Serial.print(', ');
+      Serial.print(", ");
       Serial.println(frame_lost);
     }
   }
