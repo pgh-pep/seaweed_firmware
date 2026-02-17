@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ESP32Servo.h>
 
 #define SBUS_PIN 4
 #define SBUS_BAUD 100000
@@ -64,7 +65,7 @@ const char *CHANNEL_LABELS[16] = {
 #define VR_MIN 200
 #define VR_MAX 1800
 
-void parseSBUS(uint8_t *data)
+void parse_sbus(uint8_t *data)
 {
   raw_channels[0] = ((data[1] | data[2] << 8) & 0x07FF);
   raw_channels[1] = ((data[2] >> 3 | data[3] << 5) & 0x07FF);
@@ -115,11 +116,12 @@ void normalize_channels()
   normalized_channels[5] = 1 - float(raw_channels[5] - VR_MIN) / (VR_MAX - VR_MIN);
   normalized_channels[7] = float(raw_channels[7] - VR_MIN) / (VR_MAX - VR_MIN);
 
-  // rest are meh
+  // REST OF CHANNELS (not used by reciever = no normalization)
   for (int i = 8; i < 16; i++)
     normalized_channels[i] = float(raw_channels[i]);
 }
 
+// FOR DEBUGGING
 void log_channels()
 {
   for (int i = 0; i < 16; i++)
@@ -128,6 +130,42 @@ void log_channels()
     Serial.print(": ");
     Serial.println(normalized_channels[i]);
   }
+}
+
+bool read_sbus()
+{
+  if (!sbus_serial.available())
+    return false;
+
+  if (sbus_serial.read() != SBUS_START_BYTE)
+    return false;
+
+  sbus_data[0] = SBUS_START_BYTE;
+  if (sbus_serial.readBytes(&sbus_data[1], 24) < 24)
+    return false;
+
+  if (sbus_data[24] != SBUS_END_BYTE)
+  {
+    while (sbus_serial.available())
+      sbus_serial.read();
+    return false;
+  }
+
+  parse_sbus(sbus_data);
+  normalize_channels();
+  return true;
+}
+
+void print_channels()
+{
+  for (int i = 0; i < 16; i++)
+  {
+    Serial.print(normalized_channels[i], 4);
+    Serial.print(", ");
+  }
+  Serial.print(failsafe);
+  Serial.print(", ");
+  Serial.println(frame_lost);
 }
 
 void setup()
@@ -140,41 +178,11 @@ void setup()
 
 void loop()
 {
-  if (sbus_serial.available())
+  // SERVO
+  // add ehre
+  // SBUS
+  if (read_sbus())  
   {
-    // wait for start
-    if (sbus_serial.read() == SBUS_START_BYTE)
-    {
-      sbus_data[0] = SBUS_START_BYTE;
-
-      size_t byte_count = sbus_serial.readBytes(&sbus_data[1], 24);
-
-      // validate packet length
-      if (byte_count < 24)
-      {
-        return;
-      }
-
-      // validate end byte
-      if (sbus_data[24] != SBUS_END_BYTE)
-      {
-        while (sbus_serial.available())
-          sbus_serial.read();
-        return;
-      }
-
-      parseSBUS(sbus_data);
-      normalize_channels();
-
-      for (int i = 0; i < 16; i++)
-      {
-        Serial.print(normalized_channels[i], 4);
-        Serial.print(", ");
-      }
-
-      Serial.print(failsafe);
-      Serial.print(", ");
-      Serial.println(frame_lost);
-    }
+    print_channels();
   }
 }
