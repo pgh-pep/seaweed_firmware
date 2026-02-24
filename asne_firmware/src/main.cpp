@@ -1,6 +1,10 @@
 #include <Arduino.h>
 #include <ESP32Servo.h>
 
+// SERVO
+#define SERVO_PIN 16
+
+// SBUS
 #define SBUS_PIN 4
 #define SBUS_BAUD 100000
 #define SBUS_START_BYTE 0x0F
@@ -178,8 +182,6 @@ void setup()
 
 void loop()
 {
-  // SERVO
-  // add ehre
   // SBUS
   if (read_sbus())  
   {
