@@ -2,7 +2,7 @@
 #include <ESP32Servo.h>
 
 // SERVO
-#define SERVO_PIN 16
+#define SERVO_PIN 5
 
 // SBUS
 #define SBUS_PIN 4
@@ -20,6 +20,10 @@ float normalized_channels[16];
 bool failsafe = false;
 bool frame_lost = false;
 
+Servo myServo;
+String inputBuffer = "";
+
+//This stuff is on the ESP32 sending stuff TO the Jetson
 enum Channel_idx
 {
   Joy_R_LR = 0,
@@ -172,12 +176,46 @@ void print_channels()
   Serial.println(frame_lost);
 }
 
+void read_jetson() {
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n') {
+      inputBuffer.trim();
+      if (inputBuffer.startsWith("SA:")) {
+        float angle = inputBuffer.substring(3).toFloat();
+        Serial.print("Servo angle: ");
+         Serial.println(angle);
+
+        int pulse = (int)map(angle, 0, 270, 500, 2500);
+        myServo.writeMicroseconds(pulse);
+        
+      }
+      inputBuffer = "";
+    } else {
+      inputBuffer += c;
+    }
+  }
+}
+
 void setup()
 {
   Serial.begin(115200); // USB -> Jetson
   delay(1000);
+  Serial.println("HELP");
+
+  
+  
+  Serial.println("1 - start");
 
   sbus_serial.begin(SBUS_BAUD, SERIAL_8E2, SBUS_PIN);
+  Serial.println("2 - after sbus");
+
+  Serial.println("attempting attach...");
+  myServo.setPeriodHertz(50);
+  myServo.attach(SERVO_PIN, 500, 2500);
+  
+  
+  inputBuffer.reserve(64);
 }
 
 void loop()
@@ -187,4 +225,16 @@ void loop()
   {
     print_channels();
   }
+
+  Serial.println("LOOPING");
+  myServo.writeMicroseconds(500);
+  Serial.println("0 degrees");
+  delay(2000);
+  myServo.writeMicroseconds(1500);
+  Serial.println("135 degrees");
+  delay(2000);
+  myServo.writeMicroseconds(2500);
+  Serial.println("270 degrees");
+  delay(2000);
+  //read_jetson();
 }
