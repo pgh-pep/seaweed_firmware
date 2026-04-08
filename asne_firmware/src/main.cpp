@@ -10,10 +10,9 @@
 #define SBUS_START_BYTE 0x0F
 #define SBUS_END_BYTE 0x00
 
-HardwareSerial sbus_serial(1); // UART1
+HardwareSerial sbus_serial(1);
 
 uint8_t sbus_data[25];
-
 uint16_t raw_channels[16];
 float normalized_channels[16];
 
@@ -23,7 +22,6 @@ bool frame_lost = false;
 Servo myServo;
 String inputBuffer = "";
 
-//This stuff is on the ESP32 sending stuff TO the Jetson
 enum Channel_idx
 {
   Joy_R_LR = 0,
@@ -98,7 +96,7 @@ void parse_sbus(uint8_t *data)
 
 void normalize_channels()
 {
-  // JOYSTICK -> [-1, 1]
+  // JOYSTICKS -> [-1, 1]
   normalized_channels[0] = float(raw_channels[0] - JOY_R_LR_CENTER) / JOY_AXIS_SCALE;
   normalized_channels[1] = float(raw_channels[1] - JOY_R_UD_CENTER) / -JOY_AXIS_SCALE;
   normalized_channels[2] = float(raw_channels[2] - JOY_L_UD_CENTER) / JOY_AXIS_SCALE;
@@ -107,11 +105,8 @@ void normalize_channels()
   for (int i = 0; i < 4; i++)
   {
     normalized_channels[i] = constrain(normalized_channels[i], -1.0f, 1.0f);
-
     if (abs(normalized_channels[i]) < JOY_DEADZONE)
-    {
       normalized_channels[i] = 0.0;
-    }
   }
 
   // SWITCHES
@@ -124,20 +119,9 @@ void normalize_channels()
   normalized_channels[5] = 1 - float(raw_channels[5] - VR_MIN) / (VR_MAX - VR_MIN);
   normalized_channels[7] = float(raw_channels[7] - VR_MIN) / (VR_MAX - VR_MIN);
 
-  // REST OF CHANNELS (not used by reciever = no normalization)
+  // UNUSED CHANNELS
   for (int i = 8; i < 16; i++)
     normalized_channels[i] = float(raw_channels[i]);
-}
-
-// FOR DEBUGGING
-void log_channels()
-{
-  for (int i = 0; i < 16; i++)
-  {
-    Serial.print(CHANNEL_LABELS[i]);
-    Serial.print(": ");
-    Serial.println(normalized_channels[i]);
-  }
 }
 
 bool read_sbus()
@@ -176,65 +160,94 @@ void print_channels()
   Serial.println(frame_lost);
 }
 
-void read_jetson() {
-  while (Serial.available()) {
+void read_jetson()
+{
+  while (Serial.available())
+  {
     char c = Serial.read();
-    if (c == '\n') {
+    if (c == '\n')
+    {
       inputBuffer.trim();
-      if (inputBuffer.startsWith("SA:")) {
+      if (inputBuffer.startsWith("SA:"))
+      {
         float angle = inputBuffer.substring(3).toFloat();
         Serial.print("Servo angle: ");
-         Serial.println(angle);
+        Serial.println(angle);
 
-        int pulse = (int)map(angle, 0, 270, 500, 2500);
+        int pulse = (int)map((long)angle, 0, 270, 500, 2500);
         myServo.writeMicroseconds(pulse);
-        
       }
       inputBuffer = "";
-    } else {
+    }
+    else
+    {
       inputBuffer += c;
     }
   }
 }
 
+// FOR DEBUGGING
+void log_channels()
+{
+  for (int i = 0; i < 16; i++)
+  {
+    Serial.print(CHANNEL_LABELS[i]);
+    Serial.print(": ");
+    Serial.println(normalized_channels[i]);
+  }
+}
+
+// void setup()
+// {
+//   Serial.begin(115200);
+//   delay(1000);
+
+//   myServo.setPeriodHertz(333);
+//   myServo.attach(SERVO_PIN, 500, 2500);
+
+//   sbus_serial.begin(SBUS_BAUD, SERIAL_8E2, SBUS_PIN);
+
+//   inputBuffer.reserve(64);
+
+//   Serial.println("INITIALIZED");
+// }
+
 void setup()
 {
-  Serial.begin(115200); // USB -> Jetson
-  delay(1000);
-  Serial.println("HELP");
+  Serial.begin(115200);
+  delay(2000);
 
-  
-  
-  Serial.println("1 - start");
+  Serial.println("Serial OK");
+
+  ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+  ESP32PWM::allocateTimer(2);
+  ESP32PWM::allocateTimer(3);
+
+  myServo.setPeriodHertz(333);
+  Serial.println("Period set");
+
+  myServo.attach(SERVO_PIN, 500, 2500);
+  Serial.println("Attached");
 
   sbus_serial.begin(SBUS_BAUD, SERIAL_8E2, SBUS_PIN);
-  Serial.println("2 - after sbus");
 
-  Serial.println("attempting attach...");
-  myServo.setPeriodHertz(50);
-  myServo.attach(SERVO_PIN, 500, 2500);
-  
-  
+  Serial.println("SBUS ready");
+
   inputBuffer.reserve(64);
+  Serial.println("INITIALIZED");
 }
 
 void loop()
 {
-  // SBUS
-  if (read_sbus())  
-  {
-    print_channels();
-  }
+  // if (read_sbus())
+  // {
+  //   print_channels();
+  // }
 
-  Serial.println("LOOPING");
-  myServo.writeMicroseconds(500);
-  Serial.println("0 degrees");
+  // read_jetson();
   delay(2000);
-  myServo.writeMicroseconds(1500);
-  Serial.println("135 degrees");
+  myServo.writeMicroseconds(500);
   delay(2000);
   myServo.writeMicroseconds(2500);
-  Serial.println("270 degrees");
-  delay(2000);
-  //read_jetson();
 }
