@@ -10,8 +10,6 @@
 #define SBUS_START_BYTE 0x0F
 #define SBUS_END_BYTE 0x00
 
-HardwareSerial sbus_serial(1);
-
 uint8_t sbus_data[25];
 uint16_t raw_channels[16];
 float normalized_channels[16];
@@ -126,20 +124,20 @@ void normalize_channels()
 
 bool read_sbus()
 {
-  if (!sbus_serial.available())
+  if (!Serial1.available())
     return false;
 
-  if (sbus_serial.read() != SBUS_START_BYTE)
+  if (Serial1.read() != SBUS_START_BYTE)
     return false;
 
   sbus_data[0] = SBUS_START_BYTE;
-  if (sbus_serial.readBytes(&sbus_data[1], 24) < 24)
+  if (Serial1.readBytes(&sbus_data[1], 24) < 24)
     return false;
 
   if (sbus_data[24] != SBUS_END_BYTE)
   {
-    while (sbus_serial.available())
-      sbus_serial.read();
+    while (Serial1.available())
+      Serial1.read();
     return false;
   }
 
@@ -171,6 +169,7 @@ void read_jetson()
       if (inputBuffer.startsWith("SA:"))
       {
         float angle = inputBuffer.substring(3).toFloat();
+        angle = constrain(angle, 0.0, 270.0);
         Serial.print("Servo angle: ");
         Serial.println(angle);
 
@@ -197,57 +196,36 @@ void log_channels()
   }
 }
 
-// void setup()
-// {
-//   Serial.begin(115200);
-//   delay(1000);
-
-//   myServo.setPeriodHertz(333);
-//   myServo.attach(SERVO_PIN, 500, 2500);
-
-//   sbus_serial.begin(SBUS_BAUD, SERIAL_8E2, SBUS_PIN);
-
-//   inputBuffer.reserve(64);
-
-//   Serial.println("INITIALIZED");
-// }
-
 void setup()
 {
   Serial.begin(115200);
   delay(2000);
-
   Serial.println("Serial OK");
-
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  ESP32PWM::allocateTimer(2);
-  ESP32PWM::allocateTimer(3);
-
-  myServo.setPeriodHertz(333);
-  Serial.println("Period set");
 
   myServo.attach(SERVO_PIN, 500, 2500);
   Serial.println("Attached");
 
-  sbus_serial.begin(SBUS_BAUD, SERIAL_8E2, SBUS_PIN);
+  myServo.setPeriodHertz(333);
+  Serial.println("Period set");
 
+  Serial1.begin(SBUS_BAUD, SERIAL_8E2, SBUS_PIN, -1, true);
   Serial.println("SBUS ready");
 
   inputBuffer.reserve(64);
-  Serial.println("INITIALIZED");
+  Serial.println("fULLY INITIALIZED");
 }
 
 void loop()
 {
-  // if (read_sbus())
-  // {
-  //   print_channels();
-  // }
+  if (read_sbus())
+  {
+    print_channels();
+    // log_channels();
+  }
 
-  // read_jetson();
-  delay(2000);
-  myServo.writeMicroseconds(500);
-  delay(2000);
-  myServo.writeMicroseconds(2500);
+  read_jetson();
+  // delay(2000);
+  // myServo.writeMicroseconds(500);
+  // delay(2000);
+  // myServo.writeMicroseconds(2500);
 }
