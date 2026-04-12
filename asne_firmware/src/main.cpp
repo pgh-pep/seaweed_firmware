@@ -124,26 +124,37 @@ void normalize_channels()
 
 bool read_sbus()
 {
-  if (!Serial1.available())
-    return false;
-
-  if (Serial1.read() != SBUS_START_BYTE)
-    return false;
-
-  sbus_data[0] = SBUS_START_BYTE;
-  if (Serial1.readBytes(&sbus_data[1], 24) < 24)
-    return false;
-
-  if (sbus_data[24] != SBUS_END_BYTE)
+  while (Serial1.available())
   {
-    while (Serial1.available())
+    if (Serial1.peek() != SBUS_START_BYTE)
+    {
       Serial1.read();
-    return false;
-  }
+      continue;
+    }
 
-  parse_sbus(sbus_data);
-  normalize_channels();
-  return true;
+    if (Serial1.available() < 25)
+    {
+      return false;
+    }
+
+    Serial1.read();
+    sbus_data[0] = SBUS_START_BYTE;
+
+    if (Serial1.readBytes(&sbus_data[1], 24) < 24)
+      return false;
+
+    if (sbus_data[24] != SBUS_END_BYTE)
+    {
+      while (Serial1.available())
+        Serial1.read();
+      return false;
+    }
+
+    parse_sbus(sbus_data);
+    normalize_channels();
+    return true;
+  }
+  return false;
 }
 
 void print_channels()
@@ -170,8 +181,8 @@ void read_jetson()
       {
         float angle = inputBuffer.substring(3).toFloat();
         angle = constrain(angle, 0.0, 270.0);
-        Serial.print("Servo angle: ");
-        Serial.println(angle);
+        // Serial.print("Servo angle: ");
+        // Serial.println(angle);
 
         int pulse = (int)map((long)angle, 0, 270, 500, 2500);
         myServo.writeMicroseconds(pulse);
@@ -200,19 +211,19 @@ void setup()
 {
   Serial.begin(115200);
   delay(2000);
-  Serial.println("Serial OK");
+  // Serial.println("Serial OK");
 
   myServo.attach(SERVO_PIN, 500, 2500);
-  Serial.println("Attached");
+  // Serial.println("Attached");
 
   myServo.setPeriodHertz(333);
-  Serial.println("Period set");
+  // Serial.println("Period set");
 
-  Serial1.begin(SBUS_BAUD, SERIAL_8E2, SBUS_PIN, -1, true);
-  Serial.println("SBUS ready");
+  Serial1.begin(SBUS_BAUD, SERIAL_8E2, SBUS_PIN, -1, false);
+  // Serial.println("SBUS ready");
 
   inputBuffer.reserve(64);
-  Serial.println("fULLY INITIALIZED");
+  // Serial.println("FULLY INITIALIZED");
 }
 
 void loop()
