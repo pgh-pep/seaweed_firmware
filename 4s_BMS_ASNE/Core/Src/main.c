@@ -22,6 +22,7 @@
 #include "dma.h"
 #include "fdcan.h"
 #include "gpio.h"
+#include "stm32g4xx_hal.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -35,6 +36,14 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define ADC_RES 12 
+#define ADC_RANGE 4095 
+#define R_DIV_K 160
+#define ADC1_NUM_CHANNELS 5
+#define NUM_CELLS 4
+#define ADC_V_REF 3300
+#define CURR_SENSOR_SENSITIVITY 66 // mV/A
+#define CURR_SENSOR_CALIBRATION_SAMPLES 100
 
 /* USER CODE END PD */
 
@@ -52,11 +61,71 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+static void calc_cell_voltages(void);
+static void calibrate_zero_current(void);
+static void calc_current(void);
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static const uint32_t R_TOP_K[4] = {62, 280, 510, 750};
+volatile uint16_t adc1_raw[ADC1_NUM_CHANNELS];
+volatile uint16_t tap_raw[4];
+volatile uint32_t tap_mv[4];
+volatile int32_t cell_mv[4];
+volatile int32_t current_mA = 0;
+
+volatile int count = 0;
+volatile int temp = 0;
+volatile uint8_t adc1_ready = 0;
+volatile int32_t calibrated_curr_zero_mv = 0;
+
+static void calc_cell_voltages(void)
+{
+  // tap voltage = raw * vref * (r_top + R_DIV_K) / (adc_range * R_DIV_K)
+  // NOTE: cell tap 4 is BAT+
+  for (int i = 0; i < NUM_CELLS; i++)
+  {
+    uint64_t raw = tap_raw[i];
+    tap_mv[i] = (uint32_t)((raw * ADC_V_REF * (R_TOP_K[i] + R_DIV_K))
+                                / ((uint64_t)ADC_RANGE * R_DIV_K));
+  }
+ 
+  // cell voltage is diff of adj taps (except for tap 1)
+  cell_mv[0] = (int32_t)tap_mv[0];
+  for (int i = 1; i < NUM_CELLS; i++)
+  {
+    cell_mv[i] = (int32_t)tap_mv[i] - (int32_t)tap_mv[i - 1];
+  }
+}
+
+static void calibrate_zero_current(void)
+{
+  uint32_t sum = 0;
+  for (int i = 0; i < CURR_SENSOR_CALIBRATION_SAMPLES; i++)
+  {
+    sum += adc1_raw[5];
+    HAL_Delay(1);
+  }
+
+  calibrated_curr_zero_mv = (int32_t)((sum * ADC_V_REF) / (CURR_SENSOR_CALIBRATION_SAMPLES * ADC_RANGE));
+}
+ 
+static void calc_current(void){
+  uint32_t raw = (uint32_t)adc1_raw[5];
+  int32_t pin_mv = (int32_t)((raw * ADC_V_REF) / ADC_RANGE);
+  current_mA = ((pin_mv - calibrated_curr_zero_mv) * 1000) / CURR_SENSOR_SENSITIVITY;
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+  if (hadc->Instance == ADC1)
+    {
+      adc1_ready = 1;
+    }
+}
+
 
 /* USER CODE END 0 */
 
@@ -78,8 +147,7 @@ int main(void)
 
   /* USER CODE BEGIN Init */
 
-  /* USER C
-  ODE END Init */
+  /* USER CODE END Init */
 
   /* Configure the system clock */
   SystemClock_Config();
@@ -95,7 +163,17 @@ int main(void)
   MX_FDCAN1_Init();
   MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
+  if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc1_raw, ADC1_NUM_CHANNELS) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
+  HAL_Delay(10);
+  calibrate_zero_current();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -106,9 +184,15 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     HAL_GPIO_TogglePin(FLT_STATUS1_GPIO_Port, FLT_STATUS1_Pin);
-        HAL_GPIO_TogglePin(FLT_STATUS2_GPIO_Port, FLT_STATUS2_Pin);
-
-    HAL_Delay(500);                       
+    HAL_GPIO_TogglePin(FLT_STATUS2_GPIO_Port, FLT_STATUS2_Pin);
+    count++;
+    if (adc1_ready)
+    {
+      adc1_ready = 0;
+      calc_cell_voltages();
+      calc_current();
+    }
+    HAL_Delay(500);
   }
   /* USER CODE END 3 */
 }
@@ -130,7 +214,7 @@ void SystemClock_Config(void)
   * in the RCC_OscInitTypeDef structure.
   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV2;

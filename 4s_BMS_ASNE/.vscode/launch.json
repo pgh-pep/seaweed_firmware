@@ -4,7 +4,6 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-        
         {
             "type": "stlinkgdbtarget",
             "request": "launch",
@@ -17,7 +16,11 @@
                 {
                     "imageFileName": "${command:st-stm32-ide-debug-launch.get-projects-binary-from-context1}"
                 }
-            ]
+            ],
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": "4"
+            }
         }
     ]
 }

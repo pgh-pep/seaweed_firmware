@@ -69,6 +69,8 @@ void Error_Handler(void);
 #define CHRG_FET_GPIO_Port GPIOA
 #define DISCHRG_FET_Pin GPIO_PIN_5
 #define DISCHRG_FET_GPIO_Port GPIOA
+#define CS_VIN_Pin GPIO_PIN_0
+#define CS_VIN_GPIO_Port GPIOB
 #define FLT_STATUS1_Pin GPIO_PIN_9
 #define FLT_STATUS1_GPIO_Port GPIOA
 #define FLT_STATUS2_Pin GPIO_PIN_10
