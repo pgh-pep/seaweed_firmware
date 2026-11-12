@@ -22,11 +22,10 @@
 #include "dma.h"
 #include "fdcan.h"
 #include "gpio.h"
-#include "stm32g4xx_hal.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "can_ids .h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -64,7 +63,10 @@ void SystemClock_Config(void);
 static void calc_cell_voltages(void);
 static void calibrate_zero_current(void);
 static void calc_current(void);
-
+static void drive_charge_fet(void);
+static void drive_discharge_fet(void);
+static void disable_charge_fet(void);
+static void disable_discharge_fet(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -76,10 +78,12 @@ volatile uint32_t tap_mv[4];
 volatile int32_t cell_mv[4];
 volatile int32_t current_mA = 0;
 
-volatile int count = 0;
 volatile int temp = 0;
 volatile uint8_t adc1_ready = 0;
 volatile int32_t calibrated_curr_zero_mv = 0;
+
+volatile uint8_t en_charge = 0;
+volatile uint8_t en_discharge = 0;
 
 static void calc_cell_voltages(void)
 {
@@ -126,6 +130,21 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
     }
 }
 
+static void drive_charge_fet(void){
+  HAL_GPIO_WritePin(CHRG_FET_GPIO_Port, CHRG_FET_Pin, GPIO_PIN_SET);
+}
+
+static void drive_discharge_fet(void){
+  HAL_GPIO_WritePin(CHRG_FET_GPIO_Port, CHRG_FET_Pin, GPIO_PIN_SET);
+}
+
+static void disable_charge_fet(void){
+  HAL_GPIO_WritePin(DISCHRG_FET_GPIO_Port, DISCHRG_FET_Pin, GPIO_PIN_RESET);
+}
+
+static void disable_discharge_fet(void){
+  HAL_GPIO_WritePin(DISCHRG_FET_GPIO_Port, DISCHRG_FET_Pin, GPIO_PIN_RESET);
+}
 
 /* USER CODE END 0 */
 
@@ -161,8 +180,10 @@ int main(void)
   MX_DMA_Init();
   MX_ADC1_Init();
   MX_FDCAN1_Init();
-  MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
+  disable_charge_fet();
+  disable_discharge_fet();
+
   if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK)
   {
     Error_Handler();
@@ -185,13 +206,23 @@ int main(void)
     /* USER CODE BEGIN 3 */
     HAL_GPIO_TogglePin(FLT_STATUS1_GPIO_Port, FLT_STATUS1_Pin);
     HAL_GPIO_TogglePin(FLT_STATUS2_GPIO_Port, FLT_STATUS2_Pin);
-    count++;
     if (adc1_ready)
     {
       adc1_ready = 0;
       calc_cell_voltages();
       calc_current();
     }
+
+    en_charge = 1;
+    en_discharge = 1;
+
+    if(en_charge) {
+      drive_charge_fet();
+    }
+    if(en_discharge){
+      drive_discharge_fet();
+    }
+
     HAL_Delay(500);
   }
   /* USER CODE END 3 */
