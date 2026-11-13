@@ -71,10 +71,10 @@ void Error_Handler(void);
 #define DISCHRG_FET_GPIO_Port GPIOA
 #define CS_VIN_Pin GPIO_PIN_0
 #define CS_VIN_GPIO_Port GPIOB
-#define FLT_STATUS1_Pin GPIO_PIN_9
-#define FLT_STATUS1_GPIO_Port GPIOA
-#define FLT_STATUS2_Pin GPIO_PIN_10
-#define FLT_STATUS2_GPIO_Port GPIOA
+#define RED_LED_Pin GPIO_PIN_9
+#define RED_LED_GPIO_Port GPIOA
+#define GREEN_LED_Pin GPIO_PIN_10
+#define GREEN_LED_GPIO_Port GPIOA
 #define CAN_RX_Pin GPIO_PIN_11
 #define CAN_RX_GPIO_Port GPIOA
 #define CAN_TX_Pin GPIO_PIN_12
