@@ -25,7 +25,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "can_ids .h"
+#include "can_ids.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
