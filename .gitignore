@@ -1,4 +1,6 @@
 .vscode/*
+**/.vscode/*
+**/.clangd
 
 # Prerequisites
 *.d
