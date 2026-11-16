@@ -2,6 +2,7 @@
 **/.vscode/*
 **/.settings/*
 **/.clangd
+**/build/*
 
 # Prerequisites
 *.d
