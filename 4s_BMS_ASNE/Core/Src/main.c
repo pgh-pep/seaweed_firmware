@@ -26,7 +26,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "can_ids.h"
+#include "can_common.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
