@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 // CAN arb is 11 bits, 3 MSB for type, 8 LSB for node
+// NOTE: using classic can, so only 8 byte payload max
 
 // MSG TYPES (3 MSB, note that lower values = higher priority)
 #define CAN_TYPE_ESTOP (0x0u << 8)
@@ -13,11 +14,11 @@
 #define CAN_TYPE_HEARTBEAT (0x7u << 8)
 
 // NODE IDS (8 LSB)
-#define LOW_VOLTAGE_BOARD 0x00
-#define THRUSTER_CONTROLLER 0x01
-#define BMS 0x02
-#define LED_INDICATOR 0x03
-#define CANNON_PUMP 0x04
+#define LOW_VOLTAGE_BOARD 0x01
+#define THRUSTER_CONTROLLER 0x02
+#define BMS 0x03
+#define LED_INDICATOR 0x04
+#define CANNON_PUMP 0x05
 
 // HELPERS
 #define MAKE_CAN_ID(type, node) ((type) | (node))
@@ -26,27 +27,33 @@
 
 // COMMON MSGS
 #define CAN_ID_ESTOP 0x000
+#define CAN_ID_ESTOP_RST 0x001
 #define CAN_ID_HEARTBEAT(node) MAKE_CAN_ID(CAN_TYPE_HEARTBEAT, (node))
 #define CAN_ID_THRUSTER_CMD MAKE_CAN_ID(CAN_TYPE_COMMAND, THRUSTER_CONTROLLER)
 #define CAN_ID_FIRE_CMD MAKE_CAN_ID(CAN_TYPE_COMMAND, CANNON_PUMP)
 #define CAN_ID_BATTERY_INFO MAKE_CAN_ID(CAN_TYPE_SENSOR, LOW_VOLTAGE_BOARD)
 
+// ESTOP RST PAYLOAD
+// prevent error from resetting estop
+#define ESTOP_RST_0 0xA5
+#define ESTOP_RST_1 0x5A
+
 // HEARTBEAT
 #define HEARTBEAT_PERIOD_MS 100
-#define HEARTBEAT_TIMEOUT_MS                                                   \
-  350 // 3 missed heartbeats -> assume node disconnected
+// 3 missed heartbeats -> assume node disconnected
+#define HEARTBEAT_TIMEOUT_MS 350
 
 // types
-  typedef struct __attribute__((packed)) {
-  int8_t fl; // 0.1% * value,-1000 = -100%, +1000 = +100%
+typedef struct __attribute__((packed)) {
+  int8_t fl; // 1% * value,-100 = -100%, +100 = +100%
   int8_t fr;
   int8_t bl;
   int8_t br;
 } thruster_cmds_t;
 
 typedef struct __attribute__((packed)) {
-  int8_t voltage_mV; // mV
-  int8_t current_mA; // mA
+  int16_t voltage_mV; // mV
+  int16_t current_mA; // mA
 } battery_info_t;
 
 typedef struct __attribute__((packed)) {
