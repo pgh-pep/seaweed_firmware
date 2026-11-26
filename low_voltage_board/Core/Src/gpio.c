@@ -38,8 +38,6 @@
         * Output
         * EVENT_OUT
         * EXTI
-     PA0   ------> S_TIM2_CH1
-     PA1   ------> S_TIM2_CH2
      PB0   ------> S_TIM3_CH3
      PB1   ------> S_TIM3_CH4
      PB4   ------> S_TIM3_CH1
@@ -51,27 +49,36 @@ void MX_GPIO_Init(void)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(IMU_RST_GPIO_Port, IMU_RST_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : DRY_SYNC_Pin MAG_INT_Pin */
-  GPIO_InitStruct.Pin = DRY_SYNC_Pin|MAG_INT_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  GPIO_InitStruct.Alternate = GPIO_AF1_TIM2;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, IMU_EXTRESN_Pin|IMU_CS_Pin, GPIO_PIN_SET);
 
-  /*Configure GPIO pin : IMU_RST_Pin */
-  GPIO_InitStruct.Pin = IMU_RST_Pin;
+  /*Configure GPIO pin : STATUS_LED_Pin */
+  GPIO_InitStruct.Pin = STATUS_LED_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(IMU_RST_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(STATUS_LED_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : DRY_SYNC_Pin MAG_INT_Pin */
+  GPIO_InitStruct.Pin = DRY_SYNC_Pin|MAG_INT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : IMU_EXTRESN_Pin IMU_CS_Pin */
+  GPIO_InitStruct.Pin = IMU_EXTRESN_Pin|IMU_CS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pins : ESC_PWM4_Pin ESC_PWM3_Pin ESC_PWM1_Pin ESC_PWM2_Pin */
   GPIO_InitStruct.Pin = ESC_PWM4_Pin|ESC_PWM3_Pin|ESC_PWM1_Pin|ESC_PWM2_Pin;
@@ -86,6 +93,13 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(AUDIO_IN_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
 
 }
 

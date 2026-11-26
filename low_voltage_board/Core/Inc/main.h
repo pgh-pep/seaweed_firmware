@@ -57,12 +57,18 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define STATUS_LED_Pin GPIO_PIN_13
+#define STATUS_LED_GPIO_Port GPIOC
 #define DRY_SYNC_Pin GPIO_PIN_0
 #define DRY_SYNC_GPIO_Port GPIOA
+#define DRY_SYNC_EXTI_IRQn EXTI0_IRQn
 #define MAG_INT_Pin GPIO_PIN_1
 #define MAG_INT_GPIO_Port GPIOA
-#define IMU_RST_Pin GPIO_PIN_2
-#define IMU_RST_GPIO_Port GPIOA
+#define MAG_INT_EXTI_IRQn EXTI1_IRQn
+#define IMU_EXTRESN_Pin GPIO_PIN_3
+#define IMU_EXTRESN_GPIO_Port GPIOA
+#define IMU_CS_Pin GPIO_PIN_4
+#define IMU_CS_GPIO_Port GPIOA
 #define IMU_SCK_Pin GPIO_PIN_5
 #define IMU_SCK_GPIO_Port GPIOA
 #define IMU_MISO_Pin GPIO_PIN_6
