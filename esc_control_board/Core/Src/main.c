@@ -59,6 +59,15 @@ static volatile uint8_t is_estop_latched = 0;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+static uint16_t thrust_percent_to_us(int8_t pct);
+static void set_thrust_us(uint16_t fl_us, uint16_t fr_us, uint16_t bl_us,
+                          uint16_t br_us);
+static void set_thrust_percent(int8_t fl, int8_t fr, int8_t bl, int8_t br);
+static void stop_all(void);
+static void arm_thrusters(void);
+static void init_can(void);
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan,
+                               uint32_t RxFifo0ITs);
 
 /* USER CODE END PFP */
 
