@@ -39,19 +39,24 @@ packet_decoding_status_t deserialize_packet(const uint8_t *in, size_t in_len,
   uint8_t buf[PKT_MAX_DECODED];
   size_t crc_offset = PKT_HEADER_LEN + (size_t)expected_len;
 
+  // payload can't fit in a frame
+  if (expected_len > PKT_MAX_PAYLOAD)
+    return PKT_ERR_LEN;
+
   if (in_len == 0 || in_len > PKT_MAX_ENCODED)
     return PKT_ERR_COBS;
 
   // decode
   size_t n = cobs_decode(in, in_len, buf);
-  // val length
-  if (buf[1] != expected_len)
-    return PKT_ERR_LEN;
-  // 0 -> unable to decode
   if (n == 0)
     return PKT_ERR_COBS;
-  // n must = total packet size
+
+  // n must equal header + payload + crc
   if (n != crc_offset + PKT_CRC_LEN)
+    return PKT_ERR_LEN;
+
+  // header size field must match
+  if (buf[1] != expected_len)
     return PKT_ERR_LEN;
 
   // crc check
@@ -60,10 +65,8 @@ packet_decoding_status_t deserialize_packet(const uint8_t *in, size_t in_len,
   if (crc16(buf, crc_offset) != rx_crc)
     return PKT_ERR_CRC;
 
-  // save counter
-  if (counter_buf) {
+  if (counter_buf)
     *counter_buf = buf[0];
-  }
 
   memcpy(payload_out, &buf[PKT_HEADER_LEN], expected_len);
   return PKT_OK;

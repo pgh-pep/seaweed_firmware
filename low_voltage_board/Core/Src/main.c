@@ -30,9 +30,11 @@
 #include "ring_buffer.h"
 #include "sch16t.h"
 #include "uart_common.h"
+#include "usbd_cdc.h"
 #include "usbd_cdc_if.h"
 #include <stdbool.h>
 
+extern USBD_HandleTypeDef hUsbDeviceFS;
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -108,6 +110,15 @@ static void failsafe(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 void send_tx_packet(const packet_tx_t *tx_pkt, uint8_t counter) {
+  USBD_CDC_HandleTypeDef *hcdc =
+      (USBD_CDC_HandleTypeDef *)hUsbDeviceFS.pClassData;
+
+  // previous transfer still using tx_buf
+  if (hcdc == NULL || hcdc->TxState != 0) {
+    tx_dropped++;
+    return;
+  }
+
   size_t n = serialize_packet(tx_pkt, sizeof(*tx_pkt), counter, tx_buf);
   if (n == 0)
     return;
@@ -225,7 +236,8 @@ int main(void) {
 
     /* USER CODE BEGIN 3 */
     static uint32_t last_tx = 0;
-    if (HAL_GetTick() - last_tx >= 5) {
+    // 500 Hz
+    if (HAL_GetTick() - last_tx >= 2) {
       last_tx = HAL_GetTick();
       packet_tx_t tx = {0};
       tx.stamp_ms = HAL_GetTick();
