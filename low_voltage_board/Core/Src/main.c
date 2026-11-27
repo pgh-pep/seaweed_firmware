@@ -27,6 +27,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "can_common.h"
+#include "mmc5983.h"
 #include "ring_buffer.h"
 #include "sch16t.h"
 #include "uart_common.h"
@@ -77,9 +78,12 @@ static imu_data_t imu_state;
 static bool imu_ok = false;
 static uint32_t imu_errors = 0;
 
-// static mag_data_t mag_state;
-// static uint16_t voltage;
-// static uint16_t current;
+static mag_data_t mag_state;
+static bool mag_ok = false;
+static uint32_t mag_errors = 0;
+
+static uint16_t voltage;
+static uint16_t current;
 // command states
 static thruster_commands_t thruster_states;
 static launch_actions_t launch_action_state;
@@ -226,6 +230,7 @@ int main(void) {
   MX_CRC_Init();
   /* USER CODE BEGIN 2 */
   imu_ok = imu_init();
+  mag_ok = mag_init();
 
   /* USER CODE END 2 */
 
@@ -236,24 +241,39 @@ int main(void) {
 
     /* USER CODE BEGIN 3 */
     static uint32_t last_tx = 0;
+    static uint32_t last_blink = 0;
+
+    // status LED, 1 Hz
+    if (HAL_GetTick() - last_blink >= 500) {
+      last_blink = HAL_GetTick();
+      HAL_GPIO_TogglePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin);
+    }
+
     // 500 Hz
     if (HAL_GetTick() - last_tx >= 2) {
       last_tx = HAL_GetTick();
       packet_tx_t tx = {0};
       tx.stamp_ms = HAL_GetTick();
 
+      // imu
       if (!imu_read(&imu_state))
         imu_errors++;
       tx.imu_data = imu_state;
 
-      tx.mag_data.mag_x = thruster_states.br;
-      tx.mag_data.status = cmd_valid;
+      // magnetometer
+      if (!mag_read(&mag_state)) {
+        mag_errors++;
+        mag_state.status = 0;
+      }
+      tx.mag_data = mag_state;
 
+      // battery stats
       tx.voltage = voltage;
       tx.current = current;
 
       send_tx_packet(&tx, tx_counter++);
     }
+
     uint8_t b;
     while (pop_ring(&rx_ring_buf, &b)) {
       rx_feed(b);
@@ -320,6 +340,8 @@ void Error_Handler(void) {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
+  // LED high on error
+  HAL_GPIO_WritePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin, GPIO_PIN_SET);
   while (1) {
   }
   /* USER CODE END Error_Handler_Debug */

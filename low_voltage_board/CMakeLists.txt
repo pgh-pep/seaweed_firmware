@@ -47,7 +47,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     ${CMAKE_CURRENT_SOURCE_DIR}/../common/uart_common.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../common/ring_buffer.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/sch16t.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/sch16t.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/mmc5983.c
 )
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
