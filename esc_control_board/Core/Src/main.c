@@ -39,7 +39,6 @@
 /* USER CODE BEGIN PD */
 #define PWM_NEUTRAL_US 1500
 #define PWM_RANGE_US 400
-#define FAILSAFE_TIMEOUT_MS 500
 #define ARMING_HOLD_MS 5000 // TODO: test still
 /* USER CODE END PD */
 
@@ -75,11 +74,11 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan,
 /* USER CODE BEGIN 0 */
 static uint16_t thrust_percent_to_us(int8_t pct) {
   // map -100 to +100 to 1100 to 1900 us
-  if (pct > 100)
-    pct = 100;
-  if (pct < -100)
-    pct = -100;
-  return (uint16_t)(PWM_NEUTRAL_US + (pct * PWM_RANGE_US) / 100);
+  if (pct > THRUST_PCT_MAX)
+    pct = THRUST_PCT_MAX;
+  if (pct < -THRUST_PCT_MAX)
+    pct = -THRUST_PCT_MAX;
+  return (uint16_t)(PWM_NEUTRAL_US + (pct * PWM_RANGE_US) / THRUST_PCT_MAX);
 }
 
 static void set_thrust_us(uint16_t fl_us, uint16_t fr_us, uint16_t bl_us,
@@ -109,7 +108,7 @@ static void init_can(void) {
   sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
   sFilterConfig.FilterID2 = 0x7FF; // mask -> need all 11 bits to match
 
-  // filter 0: thruster cmd (0x102)
+  // filter 0: thruster cmd (0x100)
   sFilterConfig.FilterIndex = 0;
   sFilterConfig.FilterID1 = CAN_ID_THRUSTER_CMD;
   if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK) {
@@ -179,7 +178,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan,
 
     case CAN_ID_THRUSTER_CMD:
       if (!is_estop_latched && hdr.DataLength == FDCAN_DLC_BYTES_4) {
-        thruster_cmds_t cmd;
+        thruster_commands_t cmd;
         memcpy(&cmd, payload, sizeof(cmd));
         set_thrust_percent(cmd.fl, cmd.fr, cmd.bl, cmd.br);
         lastCanRxTick = HAL_GetTick();
@@ -248,7 +247,7 @@ int main(void) {
   while (1) {
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */
-    if (HAL_GetTick() - lastCanRxTick > FAILSAFE_TIMEOUT_MS) {
+    if (HAL_GetTick() - lastCanRxTick > CAN_CMD_TIMEOUT_MS) {
       // no can msgs -> canbus or LV issue -> stop thrusters
       stop_all();
     }
