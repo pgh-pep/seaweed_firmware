@@ -4,7 +4,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// ENUMS
+// CONTROL
+#define THRUST_PCT_MAX 100
+typedef struct {
+  // percent of full thrust: -100 = full reverse, +100 = full
+  int8_t fl;
+  int8_t fr;
+  int8_t bl;
+  int8_t br;
+} thruster_commands_t;
+
 typedef enum : uint8_t {
   SOFT_ESTOP = 0x1,
   MANUAL = 0x2,
@@ -18,16 +27,7 @@ typedef enum : uint8_t {
   FIRE_PUMP = 0x3,
 } launch_actions_t;
 
-// CONTROl
-typedef struct {
-  int8_t fl;
-  int8_t fr;
-  int8_t bl;
-  int8_t br;
-} thruster_commands_t;
-
 // SENSOR
-
 // SCH16T-K01 (20-bit mode)
 #pragma pack(push, 1)
 typedef struct {
