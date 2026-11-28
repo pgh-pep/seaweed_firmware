@@ -27,7 +27,7 @@ typedef struct {
   imu_data_t imu_data;
   mag_data_t mag_data;
   uint16_t voltage;
-  uint16_t current;
+  int32_t current;
 } packet_tx_t;
 #pragma pack(pop)
 
@@ -37,7 +37,7 @@ typedef struct {
   boat_state_t state;
   thruster_commands_t thruster_commands;
   launch_actions_t launch_action;
-  uint8_t launcher_angle;
+  uint16_t launcher_angle; // degrees
 } packet_rx_t;
 #pragma pack(pop)
 

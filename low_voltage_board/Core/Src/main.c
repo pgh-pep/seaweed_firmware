@@ -34,6 +34,7 @@
 #include "usbd_cdc.h"
 #include "usbd_cdc_if.h"
 #include <stdbool.h>
+#include <string.h>
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
 /* USER CODE END Includes */
@@ -59,7 +60,7 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 
 /* USER CODE BEGIN PV */
 
-// uart buffers/frames
+// UART
 static uint8_t tx_buf[PKT_MAX_RAW];
 static uint32_t tx_dropped = 0;
 static uint8_t tx_counter = 0;
@@ -73,28 +74,47 @@ static bool rx_frame_overflow = false;
 
 static uint32_t rx_ok, rx_err_cobs, rx_err_crc, rx_err_len;
 
-// sensor states
+// IMU
 static imu_data_t imu_state;
 static bool imu_ok = false;
 static uint32_t imu_errors = 0;
 
+// MAG
 static mag_data_t mag_state;
 static bool mag_ok = false;
 static uint32_t mag_errors = 0;
 
-static uint16_t voltage;
-static uint16_t current;
-// command states
+// COMMAND STATES
 static thruster_commands_t thruster_states;
 static launch_actions_t launch_action_state;
-static uint8_t launcher_angle = 0;
+static uint16_t launcher_angle = 0;
 static boat_state_t boat_state;
-static uint16_t voltage = 15;
-static uint16_t current = 21;
-// timeouts
+
+// TIMEOUT
 static uint32_t last_rx_ms = 0;
 static bool cmd_valid = false;
 static uint8_t last_counter = 0;
+
+// BMS
+static battery_info_t battery = {0};
+static uint32_t last_bms_ms = 0;
+
+// LAUNCHER
+static uint8_t shot_id = 0;                        // inc per fire request
+static launch_actions_t shot_action = REST;        // latest shot cmd
+static launch_actions_t prev_launch_action = REST; // edge detection
+
+// CAN
+static uint32_t can_tx_dropped = 0;
+static uint32_t can_bus_off_count = 0;
+static const uint8_t estop_rst[2] = {ESTOP_RST_0, ESTOP_RST_1};
+
+// CAN payload length -> CAN DLC
+static const uint32_t can_dlc[9] = {
+    FDCAN_DLC_BYTES_0, FDCAN_DLC_BYTES_1, FDCAN_DLC_BYTES_2,
+    FDCAN_DLC_BYTES_3, FDCAN_DLC_BYTES_4, FDCAN_DLC_BYTES_5,
+    FDCAN_DLC_BYTES_6, FDCAN_DLC_BYTES_7, FDCAN_DLC_BYTES_8,
+};
 
 /* USER CODE END PV */
 
@@ -108,6 +128,12 @@ void push_rx(const uint8_t *data, uint32_t len);
 static void handle_rx_frame(const uint8_t *data, size_t len);
 static void rx_feed(uint8_t b);
 static void failsafe(void);
+
+static void init_can(void);
+static bool send_can_pkt(uint32_t id, const void *data, uint8_t len);
+static void poll_can_rx(void);
+static void get_can_status(void);
+static void CAN_cb(void);
 
 /* USER CODE END PFP */
 
@@ -156,6 +182,17 @@ static void handle_rx_frame(const uint8_t *data, size_t len) {
     return;
   }
 
+  // get a fire request on rising edge
+  bool fire_req =
+      (pkt.launch_action == FIRE_CANNON || pkt.launch_action == FIRE_PUMP);
+  if (fire_req && pkt.launch_action != prev_launch_action &&
+      pkt.state != SOFT_ESTOP) {
+    // geneate new shot id
+    shot_id++;
+    shot_action = pkt.launch_action;
+  }
+  prev_launch_action = pkt.launch_action;
+
   boat_state = pkt.state;
   thruster_states = pkt.thruster_commands;
   launch_action_state = pkt.launch_action;
@@ -188,6 +225,159 @@ static void failsafe(void) {
   boat_state = SOFT_ESTOP;
   thruster_states = (thruster_commands_t){0};
   launch_action_state = REST;
+}
+
+static void init_can(void) {
+  FDCAN_FilterTypeDef sFilterConfig = {0};
+
+  sFilterConfig.IdType = FDCAN_STANDARD_ID;
+  sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+  sFilterConfig.FilterID2 = 0x7FF; // mask -> need all 11 bits to match
+
+  // filter for BMS info
+  sFilterConfig.FilterIndex = 0;
+  sFilterConfig.FilterID1 = CAN_ID_BATTERY_INFO;
+  if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK) {
+    Error_Handler();
+  }
+
+  // reject all other frames
+  if (HAL_FDCAN_ConfigGlobalFilter(&hfdcan1, FDCAN_REJECT, FDCAN_REJECT,
+                                   FDCAN_REJECT_REMOTE,
+                                   FDCAN_REJECT_REMOTE) != HAL_OK) {
+    Error_Handler();
+  }
+
+  // init comms
+  if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK) {
+    Error_Handler();
+  }
+}
+
+static bool send_can_pkt(uint32_t id, const void *data, uint8_t len) {
+  if (len > 8)
+    return false;
+
+  // tx fifo full -> drop pkt
+  if (HAL_FDCAN_GetTxFifoFreeLevel(&hfdcan1) == 0) {
+    can_tx_dropped++;
+    return false;
+  }
+
+  FDCAN_TxHeaderTypeDef hdr = {0};
+  hdr.Identifier = id;
+  hdr.IdType = FDCAN_STANDARD_ID;
+  hdr.TxFrameType = FDCAN_DATA_FRAME;
+  hdr.DataLength = can_dlc[len];
+  hdr.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  hdr.BitRateSwitch = FDCAN_BRS_OFF;
+  hdr.FDFormat = FDCAN_CLASSIC_CAN;
+  hdr.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+  hdr.MessageMarker = 0;
+
+  // local payload copy
+  uint8_t buf[8] = {0};
+  if (data != NULL && len > 0)
+    memcpy(buf, data, len);
+
+  // add to tx can fifo
+  if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &hdr, buf) != HAL_OK) {
+    can_tx_dropped++;
+    return false;
+  }
+  return true;
+}
+
+static void poll_can_rx(void) {
+  FDCAN_RxHeaderTypeDef hdr;
+  uint8_t payload[8];
+
+  // iter through CAN RX FIFO
+  while (HAL_FDCAN_GetRxFifoFillLevel(&hfdcan1, FDCAN_RX_FIFO0) > 0) {
+    if (HAL_FDCAN_GetRxMessage(&hfdcan1, FDCAN_RX_FIFO0, &hdr, payload) !=
+        HAL_OK)
+      break;
+    // only messages should be BMS type
+    if (hdr.Identifier == CAN_ID_BATTERY_INFO &&
+        hdr.DataLength == can_dlc[sizeof(battery_info_t)]) {
+      memcpy(&battery, payload, sizeof(battery));
+      last_bms_ms = HAL_GetTick();
+    }
+  }
+}
+
+static void get_can_status(void) {
+  FDCAN_ProtocolStatusTypeDef ps;
+  // get can statis
+  if (HAL_FDCAN_GetProtocolStatus(&hfdcan1, &ps) != HAL_OK)
+    return;
+
+  // check faulty, if so reset
+  if (ps.BusOff && READ_BIT(hfdcan1.Instance->CCCR, FDCAN_CCCR_INIT)) {
+    can_bus_off_count++;
+    CLEAR_BIT(hfdcan1.Instance->CCCR, FDCAN_CCCR_INIT);
+  }
+}
+
+static void CAN_cb(void) {
+  // timers defined in can_common.h
+  static uint32_t last_estop_ms = 0;
+  static uint32_t last_thruster_ms = 0;
+  static uint32_t last_state_ms = 0;
+  static bool prev_estopped = false; // sends estop at startup curr
+  static uint8_t prev_state = 0;     // 0 = invalid -> forces first send
+  static uint32_t last_launcher_ms = 0;
+  static uint8_t prev_shot_id = 0;
+
+  uint32_t now = HAL_GetTick();
+  bool estopped = (boat_state == SOFT_ESTOP);
+
+  get_can_status();
+  poll_can_rx();
+
+  // estop/rst sent on change and periodically
+  if (estopped != prev_estopped || now - last_estop_ms >= CAN_ESTOP_REPEAT_MS) {
+    bool sent =
+        estopped ? send_can_pkt(CAN_ID_ESTOP, NULL, 0)
+                 : send_can_pkt(CAN_ID_ESTOP_RST, estop_rst, sizeof(estop_rst));
+    if (sent) {
+      prev_estopped = estopped;
+      last_estop_ms = now;
+    }
+  }
+
+  // thrusters cmds always streamed
+  if (now - last_thruster_ms >= CAN_THRUSTER_PERIOD_MS) {
+    last_thruster_ms = now;
+    thruster_commands_t cmd =
+        estopped ? (thruster_commands_t){0} : thruster_states;
+    send_can_pkt(CAN_ID_THRUSTER_CMD, &cmd, sizeof(cmd));
+  }
+
+  // boat state sent on change & periodically
+  if (boat_state != prev_state || now - last_state_ms >= CAN_STATE_PERIOD_MS) {
+    boat_state_msg_t msg = {.state = boat_state};
+    if (send_can_pkt(CAN_ID_BOAT_STATE, &msg, sizeof(msg))) {
+      prev_state = boat_state;
+      last_state_ms = now;
+    }
+  }
+  // launcher cmd sent on new shot & periodically
+  // repeats keep same shot_id, but cannon only fires on new id
+  if (shot_id != prev_shot_id ||
+      now - last_launcher_ms >= CAN_LAUNCHER_PERIOD_MS) {
+    // generate & send shot command
+    launcher_cmd_t cmd;
+    cmd.angle_deg = launcher_angle % 360;
+    cmd.power = 0;
+    cmd.action = estopped ? REST : shot_action;
+    cmd.shot_id = shot_id;
+    if (send_can_pkt(CAN_ID_LAUNCHER_CMD, &cmd, sizeof(cmd))) {
+      prev_shot_id = shot_id;
+      last_launcher_ms = now;
+    }
+  }
 }
 
 /* USER CODE END 0 */
@@ -231,6 +421,7 @@ int main(void) {
   /* USER CODE BEGIN 2 */
   imu_ok = imu_init();
   mag_ok = mag_init();
+  init_can();
 
   /* USER CODE END 2 */
 
@@ -267,9 +458,9 @@ int main(void) {
       }
       tx.mag_data = mag_state;
 
-      // battery stats
-      tx.voltage = voltage;
-      tx.current = current;
+      // battery stats (from BMS over can)
+      tx.voltage = battery.voltage_mV;
+      tx.current = battery.current_mA;
 
       send_tx_packet(&tx, tx_counter++);
     }
@@ -282,6 +473,9 @@ int main(void) {
     if (!cmd_valid || (HAL_GetTick() - last_rx_ms) > CMD_TIMEOUT_MS) {
       failsafe();
     }
+
+    // after failsafe so can always sends the latest (failsafed) state
+    CAN_cb();
   }
   /* USER CODE END 3 */
 }

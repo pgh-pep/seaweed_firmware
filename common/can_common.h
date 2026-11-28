@@ -38,7 +38,7 @@ _Static_assert(CAN_CMD_TIMEOUT_MS >= 5u * CAN_LAUNCHER_PERIOD_MS,
 // firing edge trigg based on shot_id
 // new shot_id -> fire action
 typedef struct __attribute__((packed)) {
-  int16_t angle_mrad; // launcher angle, milliradians
+  uint16_t angle_deg; // launcher angle (degrees)
   uint8_t power;      // TBD
   uint8_t action;     // launch_actions_t
   uint8_t shot_id;    // increments once per fire request
